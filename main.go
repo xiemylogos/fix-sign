@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 
 	"github.com/ontio/ontology-crypto/keypair"
@@ -14,6 +13,7 @@ import (
 	"github.com/ontio/ontology/core/genesis"
 	"github.com/ontio/ontology/core/ledger"
 	"github.com/ontio/ontology/core/types"
+	"github.com/ontio/ontology/events"
 	"github.com/urfave/cli"
 )
 
@@ -23,6 +23,12 @@ func setupAPP() *cli.App {
 	app.Action = startSupplySign
 	app.Copyright = "Copyright in 2018 The Ontology Authors"
 	app.Commands = []cli.Command{}
+	app.Flags = []cli.Flag{
+		utils.ConfigFlag,
+		utils.NetworkIdFlag,
+		utils.ReservedPeersOnlyFlag,
+		utils.ReservedPeersFileFlag,
+	}
 	return app
 }
 
@@ -39,7 +45,8 @@ func startSupplySign(ctx *cli.Context) {
 	if err != nil {
 		panic(err)
 	}
-	ldg, err := initLedger(ctx, 0)
+	cfg := initNodeConfig(ctx)
+	ldg, err := initLedger(ctx, cfg)
 	if err != nil {
 		log.Errorf(" initLedger err:%s", err)
 		return
@@ -83,22 +90,38 @@ func startSupplySign(ctx *cli.Context) {
 	}
 }
 
-func initLedger(ctx *cli.Context, stateHashHeight uint32) (*ledger.Ledger, error) {
-	var err error
-	dbDir := utils.GetStoreDirPath(config.DefConfig.Common.DataDir, config.DefConfig.P2PNode.NetworkName)
+func initNodeConfig(ctx *cli.Context) *config.OntologyConfig {
+	cfg, err := cmd.SetOntologyConfig(ctx)
+	if err != nil {
+		log.Fatalf("Failed to process node config: %s", err)
+	}
+	return cfg
+}
+
+func initLedger(ctx *cli.Context, cfg *config.OntologyConfig) (*ledger.Ledger, error) {
+	events.Init()
 	bookKeepers, err := config.DefConfig.GetBookkeepers()
 	if err != nil {
-		return nil, fmt.Errorf("GetBookkeepers error: %s", err)
+		log.Errorf("GetBookkeepers error: %s", err)
+		return nil, err
 	}
 	genesisConfig := config.DefConfig.Genesis
 	genesisBlock, err := genesis.BuildGenesisBlock(bookKeepers, genesisConfig)
 	if err != nil {
-		return nil, fmt.Errorf("genesisBlock error %s", err)
+		log.Errorf("genesisBlock error %s", err)
 	}
-	ledger.DefLedger, err = ledger.InitLedger(dbDir, stateHashHeight, bookKeepers, genesisBlock)
+	ldg, err := ledger.InitLedger(cfg.Common.DataDir, config.GetStateHashCheckHeight(cfg.P2PNode.NetworkId), bookKeepers, genesisBlock)
 	if err != nil {
-		return nil, fmt.Errorf("NewLedger error: %s", err)
+		log.Fatalf("Failed to open ledger: %s", err)
+		return nil, err
 	}
-	log.Infof("Ledger init success")
-	return ledger.DefLedger, nil
+	SetExitHandler(func() {
+		log.Info("Closing ledger")
+		if err := ldg.Close(); err != nil {
+			log.Errorf("Failed to close ledger: %s", err)
+		}
+	})
+	log.Info("Ledger init success")
+	ledger.DefLedger = ldg
+	return ldg, nil
 }
