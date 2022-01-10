@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"runtime"
 
 	"github.com/ontio/ontology-crypto/keypair"
 	sdk "github.com/ontio/ontology-go-sdk"
@@ -25,9 +26,17 @@ func setupAPP() *cli.App {
 	app.Commands = []cli.Command{}
 	app.Flags = []cli.Flag{
 		utils.ConfigFlag,
+		utils.DataDirFlag,
+		utils.DisableLogFileFlag,
+		utils.LogDirFlag,
+		utils.LogLevelFlag,
 		utils.NetworkIdFlag,
 		utils.ReservedPeersOnlyFlag,
 		utils.ReservedPeersFileFlag,
+	}
+	app.Before = func(context *cli.Context) error {
+		runtime.GOMAXPROCS(runtime.NumCPU())
+		return nil
 	}
 	return app
 }
