@@ -32,7 +32,7 @@ type ConfigParam struct {
 }
 
 func LoadAccount(ontSdk *sdk.OntologySdk) ([]*sdk.Account, error) {
-	data, err := ioutil.ReadFile("./config.json")
+	data, err := ioutil.ReadFile("./wallet_config.json")
 	if err != nil {
 		log.Errorf("ioutil.ReadFile failed ", err)
 		return nil, err
